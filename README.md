@@ -1,0 +1,1 @@
+Languages follow [Zipf's Law](https://en.wikipedia.org/wiki/Zipf%27s_law) which means that learning the most common words will allow you to understand a surprisingly high percentage of text in that language. This is a python script thats helps you do exactly that by generating an Anki deck for the N most common words in a given language, translated to another given language.
