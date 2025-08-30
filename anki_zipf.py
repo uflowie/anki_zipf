@@ -9,6 +9,7 @@ import os
 from typing import List, Tuple, Dict, Any
 import random
 import json
+from itertools import batched
 
 from wordfreq import top_n_list, word_frequency
 import genanki
@@ -58,7 +59,7 @@ def get_top_words(language: str, n: int) -> List[str]:
 
 
 def translate_batch_with_llm(
-    words: List[str], learning_lang: str, target_lang: str, model: str
+    words: tuple[str, ...], learning_lang: str, target_lang: str, model: str
 ) -> List[Tuple[str, str, str, str]]:
     """Translate a batch of words and get example sentences using LLM with structured output."""
     words_list = "\n".join([f"{i+1}. {word}" for i, word in enumerate(words)])
@@ -132,11 +133,6 @@ Make sure to return valid JSON with all {len(words)} words."""
         ]
 
 
-def chunk_list(lst: List[str], chunk_size: int) -> List[List[str]]:
-    """Split a list into chunks of specified size."""
-    return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
-
-
 def create_anki_deck(
     words_data: List[Tuple[str, str, str, str]],
     learning_lang: str,
@@ -204,17 +200,15 @@ def main():
     print(f"Translating {len(words)} words to {args.translate_to_language}...")
 
     words_data = []
-    word_chunks = chunk_list(words, 250)
+    word_batches = batched(words, 250)
 
-    for chunk_idx, chunk in enumerate(word_chunks, 1):
-        print(
-            f"Processing batch {chunk_idx}/{len(word_chunks)} ({len(chunk)} words)..."
-        )
+    for batch_index, batch in enumerate(word_batches, 1):
+        print(f"Processing batch {batch_index} ({len(batch)} words)...")
         batch_results = translate_batch_with_llm(
-            chunk, args.learning_language, args.translate_to_language, args.model
+            batch, args.learning_language, args.translate_to_language, args.model
         )
         words_data.extend(batch_results)
-        print(f"Completed batch {chunk_idx}/{len(word_chunks)}")
+        print(f"Completed batch {batch_index}")
 
     print("Creating Anki deck...")
     create_anki_deck(
@@ -222,7 +216,6 @@ def main():
     )
 
     print(f"Done! {len(words_data)} cards created in {args.output}")
-    print(f"Processed {len(word_chunks)} batches of up to 250 words each")
 
 
 if __name__ == "__main__":
