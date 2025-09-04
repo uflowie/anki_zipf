@@ -1,19 +1,25 @@
-#!/usr/bin/env python3
-"""
-Anki Zipf - Generate Anki decks for the most common words in a language
-"""
-
 import argparse
 import sys
-import os
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple
 import random
 import json
 from itertools import batched
 
-from wordfreq import top_n_list, word_frequency
+from wordfreq import top_n_list
 import genanki
 from litellm import completion
+from pydantic import BaseModel
+
+
+class WordTranslation(BaseModel):
+    word: str
+    translation: str
+    sentence: str
+    sentence_translation: str
+
+
+class TranslationResponse(BaseModel):
+    translations: List[WordTranslation]
 
 
 def parse_arguments():
@@ -32,14 +38,13 @@ def parse_arguments():
         "n_words", type=int, help="Number of most common words to include in the deck"
     )
     parser.add_argument(
+        "model",
+        help="Model to use for translations (e.g., gpt-3.5-turbo, gemini/gemini-pro, claude-3-haiku-20240307)",
+    )
+    parser.add_argument(
         "--output",
         default="anki_deck.apkg",
         help="Output filename for the Anki deck (default: anki_deck.apkg)",
-    )
-    parser.add_argument(
-        "--model",
-        required=True,
-        help="Model to use for translations (e.g., gpt-3.5-turbo, gemini/gemini-pro, claude-3-haiku-20240307)",
     )
 
     return parser.parse_args()
@@ -69,68 +74,30 @@ def translate_batch_with_llm(
 Words to translate:
 {words_list}
 
-Respond with a JSON array where each object has this exact structure:
-{{
-  "word": "original_word",
-  "translation": "translation_in_{target_lang}",
-  "sentence": "example_sentence_in_{learning_lang}",
-  "sentence_translation": "sentence_translation_in_{target_lang}"
-}}
+Provide translations for all {len(words)} words."""
 
-Make sure to return valid JSON with all {len(words)} words."""
+    response = completion(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        response_format=TranslationResponse,
+    )
 
-    try:
-        response = completion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=3000,
-            temperature=0.3,
+    translation_response = response.choices[0].message.content
+    translation_response = json.loads(translation_response)
+    translation_response = TranslationResponse(**translation_response)
+
+    result = []
+    for translation in translation_response.translations:
+        result.append(
+            (
+                translation.word,
+                translation.translation,
+                translation.sentence,
+                translation.sentence_translation,
+            )
         )
 
-        content = response.choices[0].message.content.strip()
-
-        # Try to extract JSON from response
-        json_start = content.find("[")
-        json_end = content.rfind("]") + 1
-
-        if json_start != -1 and json_end > json_start:
-            json_content = content[json_start:json_end]
-            translations = json.loads(json_content)
-
-            result = []
-            for item in translations:
-                if (
-                    isinstance(item, dict)
-                    and "word" in item
-                    and "translation" in item
-                    and "sentence" in item
-                    and "sentence_translation" in item
-                ):
-                    result.append(
-                        (
-                            item["word"],
-                            item["translation"],
-                            item["sentence"],
-                            item["sentence_translation"],
-                        )
-                    )
-
-            return result
-        else:
-            raise ValueError("No valid JSON found in response")
-
-    except Exception as e:
-        print(f"Error translating batch: {e}")
-        # Return error entries for all words
-        return [
-            (
-                word,
-                f"[Translation error for {word}]",
-                f"[Sentence error for {word}]",
-                f"[Sentence translation error for {word}]",
-            )
-            for word in words
-        ]
+    return result
 
 
 def create_anki_deck(
@@ -163,32 +130,23 @@ def create_anki_deck(
         ],
     )
 
-    # Create deck
     deck_id = random.randrange(1 << 30, 1 << 31)
     my_deck = genanki.Deck(
         deck_id, f"{learning_lang.title()} Top Words ({target_lang.title()})"
     )
 
-    # Add notes to deck
     for word, translation, sentence, sentence_translation in words_data:
         note = genanki.Note(
             model=my_model, fields=[word, translation, sentence, sentence_translation]
         )
         my_deck.add_note(note)
 
-    # Generate the deck
     genanki.Package(my_deck).write_to_file(output_file)
     print(f"Anki deck created: {output_file}")
 
 
 def main():
     args = parse_arguments()
-
-    # Note: litellm will handle API key detection based on the model used
-    # For OpenAI models: set OPENAI_API_KEY
-    # For Google models: set GOOGLE_API_KEY
-    # For Anthropic models: set ANTHROPIC_API_KEY
-    # etc.
 
     print(f"Getting top {args.n_words} words in {args.learning_language}...")
     words = get_top_words(args.learning_language, args.n_words)
