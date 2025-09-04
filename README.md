@@ -11,7 +11,7 @@ This command will generate an Anki deck with the top 50 most common French words
 ## Arguments
 
 ```
-python anki_zipf.py <learning_language> <translate_to_language> <n_words> <model_name> [--output <filename>]
+python anki_zipf.py <learning_language> <translate_to_language> <n_words> <model_name> [--output <filename>] [--deck-name <name>]
 ```
 
 **Positional arguments:**
@@ -22,3 +22,4 @@ python anki_zipf.py <learning_language> <translate_to_language> <n_words> <model
 
 **Optional arguments:**
 - `--output` - Output filename for the Anki deck (default: anki_deck.apkg)
+- `--deck-name` - Name of the Anki deck (default: `<Learning Language> Top <N> Words (<Target Language>)`)

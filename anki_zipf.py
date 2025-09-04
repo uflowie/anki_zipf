@@ -28,7 +28,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "learning_language",
-        help="Language to learn (e.g., 'serbian', 'french', 'spanish')",
+        help="Language code of the language to learn (e.g., 'fr' for french)",
     )
     parser.add_argument(
         "translate_to_language",
@@ -39,19 +39,22 @@ def parse_arguments():
     )
     parser.add_argument(
         "model",
-        help="Model to use for translations (e.g., gpt-3.5-turbo, gemini/gemini-pro, claude-3-haiku-20240307)",
+        help="Model to use for translations (e.g. gemini/gemini-2.5-pro)",
     )
     parser.add_argument(
         "--output",
         default="anki_deck.apkg",
         help="Output filename for the Anki deck (default: anki_deck.apkg)",
     )
+    parser.add_argument(
+        "--deck-name",
+        help="Name of the Anki deck (default: '<Learning Language> Top <N> Words (<Target Language>)')",
+    )
 
     return parser.parse_args()
 
 
 def get_top_words(language: str, n: int) -> List[str]:
-    """Get the top N most common words in a language."""
     try:
         words = top_n_list(language, n)
         return words
@@ -105,13 +108,10 @@ def create_anki_deck(
     learning_lang: str,
     target_lang: str,
     output_file: str,
+    n_words: int,
+    deck_name: str | None = None,
 ):
-    """Create an Anki deck from the words data."""
-
-    # Create a unique model ID
     model_id = random.randrange(1 << 30, 1 << 31)
-
-    # Define the note model
     my_model = genanki.Model(
         model_id,
         f"{learning_lang.title()} to {target_lang.title()} Vocabulary",
@@ -131,9 +131,11 @@ def create_anki_deck(
     )
 
     deck_id = random.randrange(1 << 30, 1 << 31)
-    my_deck = genanki.Deck(
-        deck_id, f"{learning_lang.title()} Top Words ({target_lang.title()})"
-    )
+    if deck_name is None:
+        deck_name = (
+            f"{learning_lang.title()} Top {n_words} Words ({target_lang.title()})"
+        )
+    my_deck = genanki.Deck(deck_id, deck_name)
 
     for word, translation, sentence, sentence_translation in words_data:
         note = genanki.Note(
@@ -170,7 +172,12 @@ def main():
 
     print("Creating Anki deck...")
     create_anki_deck(
-        words_data, args.learning_language, args.translate_to_language, args.output
+        words_data,
+        args.learning_language,
+        args.translate_to_language,
+        args.output,
+        args.n_words,
+        getattr(args, "deck_name", None),
     )
 
     print(f"Done! {len(words_data)} cards created in {args.output}")
